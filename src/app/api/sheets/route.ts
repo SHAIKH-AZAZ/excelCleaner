@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import { v4 as uuidv4 } from "uuid";
-import { getSheetNames } from "@/lib/xlsxCleaner";
+import { getSheetNames, getSheetDrawingCounts } from "@/lib/xlsxCleaner";
 import os from "os";
 
 export const runtime = "nodejs";
@@ -24,11 +24,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Read the file into a buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Extract sheet names
     const sheets = getSheetNames(buffer);
 
     if (sheets.length === 0) {
@@ -37,6 +35,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Count drawing objects per sheet
+    const drawingCounts = await getSheetDrawingCounts(buffer);
 
     // Save temp file for later processing
     const fileId = uuidv4();
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       sheets,
+      drawingCounts,
       fileId,
       fileName: file.name,
     });

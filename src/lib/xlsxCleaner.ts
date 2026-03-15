@@ -20,6 +20,84 @@ export function getSheetNames(buffer: Buffer): string[] {
 }
 
 /**
+ * Count drawing objects (images, shapes, groups) per sheet.
+ * Returns a map of sheet name → total object count.
+ */
+export async function getSheetDrawingCounts(
+  buffer: Buffer
+): Promise<Record<string, number>> {
+  const zip = await JSZip.loadAsync(buffer);
+
+  const workbookXml = await zip.file("xl/workbook.xml")?.async("string");
+  if (!workbookXml) return {};
+  const sheets = parseWorkbook(workbookXml);
+
+  const wbRelsXml = await zip
+    .file("xl/_rels/workbook.xml.rels")
+    ?.async("string");
+  if (!wbRelsXml) return {};
+  const wbRels = parseRels(wbRelsXml);
+
+  const counts: Record<string, number> = {};
+
+  for (const sheet of sheets) {
+    const sheetRel = wbRels.find((r) => r.id === sheet.rId);
+    if (!sheetRel) { counts[sheet.name] = 0; continue; }
+
+    const sheetPath = `xl/${sheetRel.target.replace(/^\.?\//, "")}`;
+    const sheetRelsPath = sheetPath.replace(
+      /^(.*\/)([^/]+)$/,
+      "$1_rels/$2.rels"
+    );
+    const sheetRelsXml = await zip.file(sheetRelsPath)?.async("string");
+    if (!sheetRelsXml) { counts[sheet.name] = 0; continue; }
+
+    const sheetRels = parseRels(sheetRelsXml);
+    const drawingRels = sheetRels.filter(
+      (r) =>
+        r.type.includes("/drawing") ||
+        r.type.includes("/vmlDrawing") ||
+        r.type.includes("/image")
+    );
+
+    let total = 0;
+
+    for (const rel of drawingRels) {
+      let drawingPath: string;
+      const target = rel.target;
+      if (target.startsWith("../")) {
+        drawingPath = `xl/${target.replace("../", "")}`;
+      } else if (target.startsWith("/")) {
+        drawingPath = target.slice(1);
+      } else {
+        const sheetDir = sheetPath.substring(0, sheetPath.lastIndexOf("/"));
+        drawingPath = `${sheetDir}/${target}`;
+      }
+
+      const drawingXml = await zip.file(drawingPath)?.async("string");
+      if (!drawingXml) continue;
+
+      if (rel.type.includes("/vmlDrawing")) {
+        // VML: count <v:shape> elements
+        total += (drawingXml.match(/<v:shape\b/gi) || []).length;
+      } else {
+        // Modern drawing: count anchor elements (each = one object)
+        total += (
+          drawingXml.match(
+            /<xdr:(twoCellAnchor|oneCellAnchor|absoluteAnchor)\b/gi
+          ) || []
+        ).length;
+      }
+    }
+
+    counts[sheet.name] = total;
+  }
+
+  return counts;
+}
+
+
+/**
  * Helper: find the first element with a given tag in a parsed XML array (preserveOrder mode).
  */
 function findElement(arr: any[], tagName: string): any | undefined {
