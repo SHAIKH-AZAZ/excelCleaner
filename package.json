@@ -15,7 +15,7 @@
     "next": "^16.1.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "three": "^0.183.2",
+
     "uuid": "^13.0.0",
     "xlsx": "^0.18.5"
   },
@@ -23,7 +23,7 @@
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.183.1",
+
     "@types/uuid": "^10.0.0",
     "typescript": "^5.9.3"
   }
